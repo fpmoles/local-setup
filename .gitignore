@@ -1,0 +1,23 @@
+# Temporary files
+*.swp
+*.swo
+*~
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# System
+.env
+.env.local
+
+# Logs
+*.log
+
+# Temporary directories
+.tmp/
+tmp/
+

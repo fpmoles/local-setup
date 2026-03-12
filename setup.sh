@@ -227,12 +227,26 @@ ensure_xcode_clt() {
 # Homebrew functions
 # ============================================================================
 
+# Load Homebrew into PATH for the current shell when installed in common locations.
+ensure_homebrew_path() {
+  if command -v brew &> /dev/null; then
+    return 0
+  fi
+
+  if [[ -x "/opt/homebrew/bin/brew" ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  elif [[ -x "/usr/local/bin/brew" ]]; then
+    eval "$(/usr/local/bin/brew shellenv)"
+  fi
+}
+
 install_homebrew() {
   if [[ "$SKIP_HOMEBREW" == true ]]; then
     warn "Skipping Homebrew installation"
     return 0
   fi
 
+  ensure_homebrew_path
   if command -v brew &> /dev/null; then
     success "Homebrew is already installed"
     return 0
@@ -241,6 +255,7 @@ install_homebrew() {
   info "Installing Homebrew..."
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
+  ensure_homebrew_path
   if command -v brew &> /dev/null; then
     success "Homebrew installed successfully"
   else
@@ -255,6 +270,7 @@ install_brew_packages() {
     return 0
   fi
 
+  ensure_homebrew_path
   if ! command -v brew &> /dev/null; then
     warn "Homebrew not available, skipping package installation"
     return 0
@@ -280,6 +296,7 @@ install_brew_casks() {
     return 0
   fi
 
+  ensure_homebrew_path
   if ! command -v brew &> /dev/null; then
     warn "Homebrew not available, skipping cask installation"
     return 0
@@ -400,10 +417,9 @@ fi
 if [[ -d "${SCRIPTS_HOME}" ]]; then
   export PATH="${SCRIPTS_HOME}:${PATH}"
 fi
-if [[ "$(uname -m)" == "arm64" && -x "/opt/homebrew/bin/brew" ]]; then
+if [[ -x "/opt/homebrew/bin/brew" ]]; then
   eval "$(/opt/homebrew/bin/brew shellenv)"
-fi
-if [[ "$(uname -m)" == "x86_64" && -x "/usr/local/bin/brew" ]]; then
+elif [[ -x "/usr/local/bin/brew" ]]; then
   eval "$(/usr/local/bin/brew shellenv)"
 fi
 

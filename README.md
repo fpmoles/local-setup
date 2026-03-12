@@ -1,8 +1,6 @@
-# local-setup
+# FPMoles Local Dev Setup
 
-Automates local macOS setup using a single script, `setup.sh`, following
-[fpm_bash_scripter](https://github.com/fpmoles/dev-pack/tree/main/skills/fpm_bash_scripter)
-conventions.
+Automates local macOS setup 
 
 It handles:
 - Homebrew installation (if missing)
@@ -19,14 +17,19 @@ It handles:
 
 ## Quick Start
 
+Option 1: Run directly from GitHub (no clone)
+
 ```bash
-curl -fsSL <raw-setup-sh-url> | bash -s -- --verbose
+curl -fsSL https://raw.githubusercontent.com/fpmoles/local-setup/main/setup.sh | bash -s -- --verbose
 ```
 
-Use your repository raw script URL, for example:
+Option 2: Clone the repo and run locally
 
-```text
-https://raw.githubusercontent.com/<owner>/<repo>/<branch>/setup.sh
+```bash
+git clone https://github.com/fpmoles/local-setup.git
+cd local-setup
+chmod +x setup.sh
+./setup.sh --verbose
 ```
 
 ## Usage

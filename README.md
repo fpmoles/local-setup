@@ -89,13 +89,13 @@ Notes:
 Created from `DEV_DIRS` in `setup.sh`:
 
 ```text
-~/dev/
-  code/
-  projects/
-  learning/
-  docker/
 ~/.local/
   bin/
+~/dev/
+  code/
+  docker/
+  learning/
+  templates/
 ```
 
 ## `.zshrc` Behavior
@@ -109,13 +109,13 @@ On re-run, it replaces only that block and leaves other `.zshrc` content untouch
 
 ### Managed Environment Variables
 
-- `DEV_HOME="${HOME}/dev"`
 - `CODE_HOME="${DEV_HOME}/code"`
-- `PROJECTS_HOME="${DEV_HOME}/projects"`
-- `LEARNING_HOME="${DEV_HOME}/learning"`
+- `DEV_HOME="${HOME}/dev"`
 - `DOCKER_DATA_HOME="${DEV_HOME}/docker"`
-- `SCRIPTS_HOME="${HOME}/.local/bin"`
 - `JAVA_HOME="$(/usr/libexec/java_home 2>/dev/null)"`
+- `LEARNING_HOME="${DEV_HOME}/learning"`
+- `SCRIPTS_HOME="${HOME}/.local/bin"`
+- `TEMPLATES_HOME="${DEV_HOME}/templates"`
 
 ### Managed PATH Additions
 

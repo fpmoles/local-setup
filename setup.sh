@@ -57,12 +57,12 @@ declare -a BREW_CASKS=(
 
 # Development directories to create
 declare -a DEV_DIRS=(
+  "${HOME}/.local/bin"
   "${HOME}/dev"
   "${HOME}/dev/code"
-  "${HOME}/dev/projects"
-  "${HOME}/dev/learning"
   "${HOME}/dev/docker"
-  "${HOME}/.local/bin"
+  "${HOME}/dev/learning"
+  "${HOME}/dev/templates"
 )
 
 # ============================================================================
@@ -383,13 +383,13 @@ configure_zshrc() {
 
 # >>> local-setup managed block >>>
 # Environment variables
-export DEV_HOME="${HOME}/dev"
 export CODE_HOME="${DEV_HOME}/code"
-export PROJECTS_HOME="${DEV_HOME}/projects"
-export LEARNING_HOME="${DEV_HOME}/learning"
+export DEV_HOME="${HOME}/dev"
 export DOCKER_DATA_HOME="${DEV_HOME}/docker"
-export SCRIPTS_HOME="${HOME}/.local/bin"
 export JAVA_HOME="$(/usr/libexec/java_home 2>/dev/null)"
+export LEARNING_HOME="${DEV_HOME}/learning"
+export SCRIPTS_HOME="${HOME}/.local/bin"
+export TEMPLATES_HOME="${DEV_HOME}/templates"
 
 # Path additions
 if [[ -n "${JAVA_HOME}" ]]; then

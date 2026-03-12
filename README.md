@@ -94,6 +94,7 @@ Created from `DEV_DIRS` in `setup.sh`:
 ~/dev/
   code/
   docker/
+  go/
   learning/
   templates/
 ```
@@ -112,6 +113,7 @@ On re-run, it replaces only that block and leaves other `.zshrc` content untouch
 - `CODE_HOME="${DEV_HOME}/code"`
 - `DEV_HOME="${HOME}/dev"`
 - `DOCKER_DATA_HOME="${DEV_HOME}/docker"`
+- `GOPATH="${DEV_HOME}/go"`
 - `JAVA_HOME="$(/usr/libexec/java_home 2>/dev/null)"`
 - `LEARNING_HOME="${DEV_HOME}/learning"`
 - `SCRIPTS_HOME="${HOME}/.local/bin"`

@@ -383,8 +383,8 @@ configure_zshrc() {
 
 # >>> local-setup managed block >>>
 # Environment variables
-export CODE_HOME="${DEV_HOME}/code"
 export DEV_HOME="${HOME}/dev"
+export CODE_HOME="${DEV_HOME}/code"
 export DOCKER_DATA_HOME="${DEV_HOME}/docker"
 export JAVA_HOME="$(/usr/libexec/java_home 2>/dev/null)"
 export LEARNING_HOME="${DEV_HOME}/learning"

@@ -27,7 +27,11 @@ SKIP_PACKAGES=false
 SKIP_CASKS=false
 SKIP_ZSHRC=false
 SKIP_DIRECTORIES=false
+SKIP_GITCONFIG=false
+SKIP_SSH_KEY=false
 VERBOSE=false
+
+GIT_EMAIL=""
 
 # Homebrew packages to install
 declare -a BREW_PACKAGES=(
@@ -102,6 +106,8 @@ Options:
   --skip-casks              Skip installing Homebrew casks
   --skip-zshrc              Skip zshrc configuration
   --skip-directories        Skip development directory creation
+  --skip-gitconfig          Skip git global configuration
+  --skip-ssh-key            Skip SSH keypair generation
   --skip-all                Skip all installation steps (useful for testing)
 
 Examples:
@@ -152,12 +158,22 @@ parse_args() {
         SKIP_DIRECTORIES=true
         shift
         ;;
+      --skip-gitconfig)
+        SKIP_GITCONFIG=true
+        shift
+        ;;
+      --skip-ssh-key)
+        SKIP_SSH_KEY=true
+        shift
+        ;;
       --skip-all)
         SKIP_HOMEBREW=true
         SKIP_PACKAGES=true
         SKIP_CASKS=true
         SKIP_ZSHRC=true
         SKIP_DIRECTORIES=true
+        SKIP_GITCONFIG=true
+        SKIP_SSH_KEY=true
         shift
         ;;
       -*)
@@ -425,6 +441,7 @@ fi
 
 # Aliases
 alias k='kubectl'
+alias code='cd ${CODE_HOME} && ls'
 
 PROMPT="%D%T %~ "
 # <<< local-setup managed block <<<
@@ -458,6 +475,71 @@ create_dev_directories() {
 }
 
 # ============================================================================
+# Git configuration functions
+# ============================================================================
+
+configure_gitconfig() {
+  if [[ "$SKIP_GITCONFIG" == true ]]; then
+    warn "Skipping git global configuration"
+    return 0
+  fi
+
+  info "Configuring global git settings..."
+
+  local git_name="Frank P Moley III"
+
+  while [[ -z "$GIT_EMAIL" ]]; do
+    read -r -p "Enter your git email address: " GIT_EMAIL
+    if [[ -z "$GIT_EMAIL" ]]; then
+      warn "Email address is required for git configuration"
+    fi
+  done
+
+  git config --global user.name "$git_name"
+  git config --global user.email "$GIT_EMAIL"
+
+  git config --global init.defaultBranch main
+
+  git config --global url."git@github.com:".insteadOf "https://github.com/"
+  git config --global url."git@gitlab.com:".insteadOf "https://gitlab.com/"
+
+  success "Git global configuration complete"
+}
+
+generate_ssh_keypair() {
+  if [[ "$SKIP_SSH_KEY" == true ]]; then
+    warn "Skipping SSH keypair generation"
+    return 0
+  fi
+
+  local key_path="${HOME}/.ssh/id_ed25519"
+
+  if [[ -f "$key_path" ]]; then
+    success "SSH keypair already exists at ${key_path}"
+  else
+    info "Generating SSH ed25519 keypair..."
+
+    mkdir -p "${HOME}/.ssh"
+    chmod 700 "${HOME}/.ssh"
+
+    local key_comment="${GIT_EMAIL:-$(whoami)@$(hostname -s)}"
+    ssh-keygen -t ed25519 -C "$key_comment" -f "$key_path" -N ""
+
+    success "SSH keypair generated at ${key_path}"
+  fi
+
+  info "Copying public key to clipboard..."
+  pbcopy < "${key_path}.pub"
+  success "Public key copied to clipboard"
+
+  echo ""
+  info "Add your public key to:"
+  info "  GitHub : https://github.com/settings/ssh/new"
+  info "  GitLab : https://gitlab.com/-/profile/keys"
+  echo ""
+}
+
+# ============================================================================
 # Main entry point
 # ============================================================================
 
@@ -475,6 +557,8 @@ main() {
   configure_github_token
   configure_zshrc
   create_dev_directories
+  configure_gitconfig
+  generate_ssh_keypair
 
   echo ""
   success "Setup complete! 🎉"

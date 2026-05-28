@@ -25,6 +25,8 @@ readonly NC='\033[0m'
 SKIP_HOMEBREW=false
 SKIP_PACKAGES=false
 SKIP_CASKS=false
+SKIP_NPM_GLOBALS=false
+SKIP_YARN_GLOBALS=false
 SKIP_ZSHRC=false
 SKIP_DIRECTORIES=false
 SKIP_GITCONFIG=false
@@ -54,9 +56,21 @@ declare -a BREW_PACKAGES=(
 # Homebrew casks to install
 declare -a BREW_CASKS=(
   "docker"
+  "gcloud-cli"
   "oracle-jdk@17"
   "oracle-jdk@21"
   "oracle-jdk"
+)
+
+# npm global packages to install
+declare -a NPM_GLOBAL_PACKAGES=(
+  "yarn"
+)
+
+# yarn global packages to install
+declare -a YARN_GLOBAL_PACKAGES=(
+  "create-react-app"
+  "create-redwood-app"
 )
 
 # Development directories to create
@@ -104,6 +118,8 @@ Options:
   --skip-homebrew           Skip Homebrew installation
   --skip-packages           Skip installing Homebrew packages
   --skip-casks              Skip installing Homebrew casks
+  --skip-npm-globals        Skip installing global npm packages
+  --skip-yarn-globals       Skip installing global yarn packages
   --skip-zshrc              Skip zshrc configuration
   --skip-directories        Skip development directory creation
   --skip-gitconfig          Skip git global configuration
@@ -112,8 +128,17 @@ Options:
 
 Examples:
   ./setup.sh                              # Full setup
-  ./setup.sh --skip-packages              # Skip packages only
-  ./setup.sh --verbose                    # Verbose output
+  ./setup.sh --verbose                    # Full setup with verbose output
+  ./setup.sh --skip-homebrew              # Skip Homebrew install (already installed)
+  ./setup.sh --skip-packages              # Skip Homebrew formula installs
+  ./setup.sh --skip-casks                 # Skip Homebrew cask installs
+  ./setup.sh --skip-npm-globals           # Skip global npm package installs
+  ./setup.sh --skip-yarn-globals          # Skip global yarn package installs
+  ./setup.sh --skip-zshrc                 # Skip .zshrc managed block update
+  ./setup.sh --skip-directories           # Skip dev directory creation
+  ./setup.sh --skip-gitconfig             # Skip git global config
+  ./setup.sh --skip-ssh-key               # Skip SSH keypair generation
+  ./setup.sh --skip-all                   # Dry-run: parse args only (useful for testing)
 EOF
   exit 0
 }
@@ -150,6 +175,14 @@ parse_args() {
         SKIP_CASKS=true
         shift
         ;;
+      --skip-npm-globals)
+        SKIP_NPM_GLOBALS=true
+        shift
+        ;;
+      --skip-yarn-globals)
+        SKIP_YARN_GLOBALS=true
+        shift
+        ;;
       --skip-zshrc)
         SKIP_ZSHRC=true
         shift
@@ -170,6 +203,8 @@ parse_args() {
         SKIP_HOMEBREW=true
         SKIP_PACKAGES=true
         SKIP_CASKS=true
+        SKIP_NPM_GLOBALS=true
+        SKIP_YARN_GLOBALS=true
         SKIP_ZSHRC=true
         SKIP_DIRECTORIES=true
         SKIP_GITCONFIG=true
@@ -338,6 +373,56 @@ install_brew_casks() {
   success "Homebrew casks installation complete"
 }
 
+install_npm_global_packages() {
+  if [[ "$SKIP_NPM_GLOBALS" == true ]]; then
+    warn "Skipping global npm packages installation"
+    return 0
+  fi
+
+  if ! command -v npm &> /dev/null; then
+    warn "npm not available, skipping global npm packages"
+    return 0
+  fi
+
+  info "Installing global npm packages..."
+
+  for package in "${NPM_GLOBAL_PACKAGES[@]}"; do
+    if npm list -g --depth=0 "$package" &> /dev/null; then
+      log_verbose "Global npm package already installed: $package"
+    else
+      info "Installing global npm package: $package"
+      npm install -g "$package" || warn "Failed to install global npm package: $package"
+    fi
+  done
+
+  success "Global npm packages installation complete"
+}
+
+install_yarn_global_packages() {
+  if [[ "$SKIP_YARN_GLOBALS" == true ]]; then
+    warn "Skipping global yarn packages installation"
+    return 0
+  fi
+
+  if ! command -v yarn &> /dev/null; then
+    warn "yarn not available, skipping global yarn packages"
+    return 0
+  fi
+
+  info "Installing global yarn packages..."
+
+  for package in "${YARN_GLOBAL_PACKAGES[@]}"; do
+    if yarn global list 2>/dev/null | grep -q "\"${package}@"; then
+      log_verbose "Global yarn package already installed: $package"
+    else
+      info "Installing global yarn package: $package"
+      yarn global add "$package" || warn "Failed to install global yarn package: $package"
+    fi
+  done
+
+  success "Global yarn packages installation complete"
+}
+
 # ============================================================================
 # Configuration functions
 # ============================================================================
@@ -356,7 +441,7 @@ configure_github_token() {
   info "Create a token at: https://github.com/settings/tokens"
   echo ""
 
-  read -r -p "Enter your GITHUB_TOKEN (or press Enter to skip): " github_token
+  read -r -p "Enter your GITHUB_TOKEN (or press Enter to skip): " github_token || true
 
   if [[ -z "$github_token" ]]; then
     warn "GitHub token not set"
@@ -489,7 +574,7 @@ configure_gitconfig() {
   local git_name="Frank P Moley III"
 
   while [[ -z "$GIT_EMAIL" ]]; do
-    read -r -p "Enter your git email address: " GIT_EMAIL
+    read -r -p "Enter your git email address: " GIT_EMAIL || true
     if [[ -z "$GIT_EMAIL" ]]; then
       warn "Email address is required for git configuration"
     fi
@@ -554,6 +639,8 @@ main() {
   install_homebrew
   install_brew_packages
   install_brew_casks
+  install_npm_global_packages
+  install_yarn_global_packages
   configure_github_token
   configure_zshrc
   create_dev_directories

@@ -31,6 +31,7 @@ SKIP_ZSHRC=false
 SKIP_DIRECTORIES=false
 SKIP_GITCONFIG=false
 SKIP_SSH_KEY=false
+SKIP_AI_CONFIG=false
 VERBOSE=false
 
 GIT_EMAIL=""
@@ -78,10 +79,13 @@ declare -a DEV_DIRS=(
   "${HOME}/.local/bin"
   "${HOME}/dev"
   "${HOME}/dev/code"
+  "${HOME}/dev/designs"
   "${HOME}/dev/docker"
   "${HOME}/dev/go"
   "${HOME}/dev/learning"
+  "${HOME}/dev/proposals"
   "${HOME}/dev/templates"
+
 )
 
 # ============================================================================
@@ -124,6 +128,7 @@ Options:
   --skip-directories        Skip development directory creation
   --skip-gitconfig          Skip git global configuration
   --skip-ssh-key            Skip SSH keypair generation
+  --skip-ai-config          Skip AI coding tool configuration (Claude Code, Codex, Copilot)
   --skip-all                Skip all installation steps (useful for testing)
 
 Examples:
@@ -199,6 +204,10 @@ parse_args() {
         SKIP_SSH_KEY=true
         shift
         ;;
+      --skip-ai-config)
+        SKIP_AI_CONFIG=true
+        shift
+        ;;
       --skip-all)
         SKIP_HOMEBREW=true
         SKIP_PACKAGES=true
@@ -209,6 +218,7 @@ parse_args() {
         SKIP_DIRECTORIES=true
         SKIP_GITCONFIG=true
         SKIP_SSH_KEY=true
+        SKIP_AI_CONFIG=true
         shift
         ;;
       -*)
@@ -510,6 +520,7 @@ export JAVA_HOME="$(/usr/libexec/java_home 2>/dev/null)"
 export LEARNING_HOME="${DEV_HOME}/learning"
 export SCRIPTS_HOME="${HOME}/.local/bin"
 export TEMPLATES_HOME="${DEV_HOME}/templates"
+export CURRENT_USER="${USER}"
 
 # Path additions
 if [[ -n "${JAVA_HOME}" ]]; then
@@ -518,6 +529,7 @@ fi
 if [[ -d "${SCRIPTS_HOME}" ]]; then
   export PATH="${SCRIPTS_HOME}:${PATH}"
 fi
+export PATH="${GOPATH}/bin:${PATH}"
 if [[ -x "/opt/homebrew/bin/brew" ]]; then
   eval "$(/opt/homebrew/bin/brew shellenv)"
 elif [[ -x "/usr/local/bin/brew" ]]; then
@@ -527,6 +539,11 @@ fi
 # Aliases
 alias k='kubectl'
 alias code='cd ${CODE_HOME} && ls'
+alias kc='kubectl config'
+alias kg='kubectl get'
+alias kd='kubectl describe'
+alias kl='kubectl logs'
+alias tf='terraform'
 
 PROMPT="%D%T %~ "
 # <<< local-setup managed block <<<
@@ -588,6 +605,23 @@ configure_gitconfig() {
   git config --global url."git@github.com:".insteadOf "https://github.com/"
   git config --global url."git@gitlab.com:".insteadOf "https://gitlab.com/"
 
+  local global_gitignore="${HOME}/.gitignore_global"
+  if [[ ! -f "$global_gitignore" ]]; then
+    cat > "$global_gitignore" << 'GITIGNORE_GLOBAL'
+.idea/
+.spec/
+.plans/
+**/.claude/settings.local.json
+GITIGNORE_GLOBAL
+    success "Created global gitignore: $global_gitignore"
+  fi
+  git config --global core.excludesFile "~/.gitignore_global"
+
+  git config --global push.autoSetupRemote true
+  git config --global pull.rebase true
+  git config --global rebase.autoStash true
+  git config --global merge.ff only
+
   success "Git global configuration complete"
 }
 
@@ -625,6 +659,173 @@ generate_ssh_keypair() {
 }
 
 # ============================================================================
+# AI coding tool configuration functions
+#
+# Grants AI coding tools (Claude Code, Codex CLI, GitHub Copilot CLI) access to
+# the directories this script manages, so a fresh machine doesn't hit a wall of
+# permission/trust prompts the first time an AI tool is pointed at ${DEV_HOME}.
+# Every write here is additive/idempotent: existing config files are merged,
+# never overwritten, and tools that aren't installed are left untouched.
+# ============================================================================
+
+# Turns "$HOME/dev/code" into "~/dev/code" for tools (like Claude Code) that
+# accept tilde-relative paths in config, keeping settings portable across machines.
+to_tilde_path() {
+  echo "${1/#$HOME/\~}"
+}
+
+# Prints a JSON array from its arguments (or "[]" for none).
+to_json_array() {
+  if [[ $# -eq 0 ]]; then
+    echo "[]"
+  else
+    printf '%s\n' "$@" | jq -R . | jq -sc .
+  fi
+}
+
+configure_claude_settings() {
+  if ! command -v jq &> /dev/null; then
+    warn "jq not available, skipping Claude Code settings configuration"
+    return 0
+  fi
+
+  local claude_dir="${HOME}/.claude"
+  local settings_file="${claude_dir}/settings.json"
+  mkdir -p "$claude_dir"
+
+  # Grant access to every directory this script manages, and scope Edit/Write
+  # to the same set (minus ~/.local/bin, whose contents are managed scripts).
+  local additional_dirs=() allow_rules=() dir tilde_dir
+  local static_allow=(
+    "Read" "Glob" "Grep"
+    "Bash(git status)" "Bash(git diff*)" "Bash(git log*)" "Bash(git add*)"
+    "Bash(git commit*)" "Bash(git branch*)" "Bash(git checkout*)"
+    "Bash(git pull*)" "Bash(git push*)"
+    "Bash(ls*)" "Bash(grep*)" "Bash(cat*)" "Bash(pwd*)" "Bash(mkdir*)" "Bash(cd*)"
+  )
+  local static_deny=(
+    "Bash(rm -rf*)" "Bash(curl*)" "Bash(wget*)"
+    "Write(~/.local/bin/**)" "Bash(chmod*~/.local/bin*)"
+  )
+
+  for dir in "${DEV_DIRS[@]}"; do
+    tilde_dir="$(to_tilde_path "$dir")"
+    additional_dirs+=("$tilde_dir")
+    if [[ "$dir" != "${HOME}/.local/bin" ]]; then
+      allow_rules+=("Edit(${tilde_dir}/**)" "Write(${tilde_dir}/**)")
+    fi
+  done
+  allow_rules=("${static_allow[@]}" "${allow_rules[@]}")
+
+  local dirs_json allow_json deny_json
+  dirs_json="$(to_json_array "${additional_dirs[@]}")"
+  allow_json="$(to_json_array "${allow_rules[@]}")"
+  deny_json="$(to_json_array "${static_deny[@]}")"
+
+  if [[ -f "$settings_file" ]]; then
+    local tmp_file="${settings_file}.tmp"
+    if jq \
+      --argjson newDirs "$dirs_json" \
+      --argjson newAllow "$allow_json" \
+      --argjson newDeny "$deny_json" \
+      '.permissions = ((.permissions // {}) + {
+         additionalDirectories: (((.permissions.additionalDirectories // []) + $newDirs) | unique),
+         allow: (((.permissions.allow // []) + $newAllow) | unique),
+         deny: (((.permissions.deny // []) + $newDeny) | unique)
+       })' \
+      "$settings_file" > "$tmp_file" 2> /dev/null; then
+      mv "$tmp_file" "$settings_file"
+      success "Merged dev directory permissions into: $settings_file"
+    else
+      rm -f "$tmp_file"
+      warn "Failed to update Claude Code settings, leaving existing file untouched: $settings_file"
+    fi
+  else
+    jq -n \
+      --argjson dirs "$dirs_json" \
+      --argjson allow "$allow_json" \
+      --argjson deny "$deny_json" \
+      '{permissions: {additionalDirectories: $dirs, allow: $allow, deny: $deny, defaultMode: "default"}}' \
+      > "$settings_file"
+    success "Created Claude Code settings: $settings_file"
+  fi
+}
+
+# Marks ${DEV_HOME} as a trusted project for Codex CLI (~/.codex/config.toml),
+# so project-scoped .codex/ layers load without a per-session trust prompt.
+# Only touches the file if Codex CLI is actually installed.
+configure_codex_trust() {
+  local codex_home="${HOME}/.codex"
+  [[ -d "$codex_home" ]] || { log_verbose "Codex CLI not installed (no ~/.codex), skipping"; return 0; }
+
+  local config_file="${codex_home}/config.toml"
+  local project_table="[projects.\"${HOME}/dev\"]"
+
+  touch "$config_file"
+
+  if grep -Fq "$project_table" "$config_file"; then
+    log_verbose "Codex CLI already trusts ${HOME}/dev"
+    return 0
+  fi
+
+  {
+    echo ""
+    echo "$project_table"
+    echo "trust_level = \"trusted\""
+  } >> "$config_file"
+
+  success "Marked ${HOME}/dev as a trusted Codex CLI project"
+}
+
+# Adds dev directories to GitHub Copilot CLI's trusted folders
+# (~/.copilot/config.json), so Copilot can read/write/exec there without a
+# per-session trust prompt. Only touches the file if Copilot CLI is installed,
+# and only ever adds to trustedFolders — no other keys in this
+# tool-managed file are read or modified.
+configure_copilot_trust() {
+  local copilot_home="${HOME}/.copilot"
+  [[ -d "$copilot_home" ]] || { log_verbose "Copilot CLI not installed (no ~/.copilot), skipping"; return 0; }
+
+  if ! command -v jq &> /dev/null; then
+    warn "jq not available, skipping Copilot CLI trusted folder configuration"
+    return 0
+  fi
+
+  local config_file="${copilot_home}/config.json"
+  local trusted_json
+  trusted_json="$(to_json_array "${HOME}/dev" "${HOME}/.local/bin")"
+
+  if [[ -f "$config_file" ]]; then
+    local tmp_file="${config_file}.tmp"
+    if jq --argjson newTrusted "$trusted_json" \
+      '.trustedFolders = ((.trustedFolders // []) + $newTrusted | unique)' \
+      "$config_file" > "$tmp_file" 2> /dev/null; then
+      mv "$tmp_file" "$config_file"
+      success "Added dev directories to Copilot CLI trusted folders"
+    else
+      rm -f "$tmp_file"
+      warn "Failed to update Copilot CLI trusted folders, leaving existing file untouched: $config_file"
+    fi
+  else
+    jq -n --argjson trusted "$trusted_json" '{trustedFolders: $trusted}' > "$config_file"
+    success "Created Copilot CLI trusted folders: $config_file"
+  fi
+}
+
+configure_ai_tool_access() {
+  if [[ "$SKIP_AI_CONFIG" == true ]]; then
+    warn "Skipping AI coding tool configuration"
+    return 0
+  fi
+
+  info "Configuring AI coding tool access..."
+  configure_claude_settings
+  configure_codex_trust
+  configure_copilot_trust
+  success "AI coding tool configuration complete"
+}
+
+# ============================================================================
 # Main entry point
 # ============================================================================
 
@@ -646,6 +847,7 @@ main() {
   create_dev_directories
   configure_gitconfig
   generate_ssh_keypair
+  configure_ai_tool_access
 
   echo ""
   success "Setup complete! 🎉"

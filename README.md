@@ -49,6 +49,9 @@ chmod +x setup.sh
 | `--skip-casks` | Skip Homebrew casks |
 | `--skip-zshrc` | Skip `.zshrc` updates |
 | `--skip-directories` | Skip directory creation |
+| `--skip-gitconfig` | Skip git global configuration |
+| `--skip-ssh-key` | Skip SSH keypair generation |
+| `--skip-ai-config` | Skip AI coding tool configuration |
 | `--skip-all` | Skip all install/config steps |
 
 ## What Gets Installed
@@ -93,9 +96,11 @@ Created from `DEV_DIRS` in `setup.sh`:
   bin/
 ~/dev/
   code/
+  designs/
   docker/
   go/
   learning/
+  proposals/
   templates/
 ```
 
@@ -111,6 +116,7 @@ On re-run, it replaces only that block and leaves other `.zshrc` content untouch
 ### Managed Environment Variables
 
 - `CODE_HOME="${DEV_HOME}/code"`
+- `CURRENT_USER="${USER}"`
 - `DEV_HOME="${HOME}/dev"`
 - `DOCKER_DATA_HOME="${DEV_HOME}/docker"`
 - `GOPATH="${DEV_HOME}/go"`
@@ -123,11 +129,17 @@ On re-run, it replaces only that block and leaves other `.zshrc` content untouch
 
 - Prepends `${JAVA_HOME}/bin` when `JAVA_HOME` is set
 - Prepends `${SCRIPTS_HOME}` when directory exists
+- Prepends `${GOPATH}/bin`
 - Loads Homebrew shellenv for Apple Silicon (`/opt/homebrew`) or Intel (`/usr/local`)
 
 ### Managed Aliases
 
 - `alias k='kubectl'`
+- `alias kc='kubectl config'`
+- `alias kg='kubectl get'`
+- `alias kd='kubectl describe'`
+- `alias kl='kubectl logs'`
+- `alias tf='terraform'`
 
 ### Managed Prompt
 
@@ -141,6 +153,34 @@ Before `.zshrc` block management, the script checks for an existing line matchin
 
 If present, token prompting is skipped.
 If not present, it prompts and writes the token export to `.zshrc`.
+
+## Git Global Configuration
+
+Sets, via `git config --global`:
+
+- `user.name` / `user.email` (email is prompted for)
+- `init.defaultBranch main`
+- `url."git@github.com:".insteadOf https://github.com/`
+- `url."git@gitlab.com:".insteadOf https://gitlab.com/`
+- `core.excludesFile ~/.gitignore_global` — creates `~/.gitignore_global` with a small default
+  (`.idea/`, `.spec/`, `.plans/`, `**/.claude/settings.local.json`) if it doesn't already exist
+- `push.autoSetupRemote true`
+- `pull.rebase true`
+- `rebase.autoStash true`
+- `merge.ff only`
+
+## AI Coding Tool Configuration
+
+Grants AI coding tools access to `DEV_DIRS` so a fresh machine doesn't hit a wall of
+permission/trust prompts the first time an AI tool is pointed at `~/dev`. Every write is
+additive and idempotent — existing config files are merged (never overwritten), and a tool
+that isn't installed on the machine is left untouched.
+
+| Tool | File | What's written |
+|---|---|---|
+| Claude Code | `~/.claude/settings.json` | `permissions.additionalDirectories` for every `DEV_DIRS` entry, plus `allow`/`deny` rules scoping Edit/Write to those directories (`~/.local/bin` excluded — its contents are managed scripts) |
+| Codex CLI | `~/.codex/config.toml` | `[projects."~/dev"]` marked `trust_level = "trusted"` |
+| GitHub Copilot CLI | `~/.copilot/config.json` | `~/dev` and `~/.local/bin` added to `trustedFolders` |
 
 ## Customization
 

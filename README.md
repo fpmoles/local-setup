@@ -178,7 +178,7 @@ that isn't installed on the machine is left untouched.
 
 | Tool | File | What's written |
 |---|---|---|
-| Claude Code | `~/.claude/settings.json` | `permissions.additionalDirectories` for every `DEV_DIRS` entry, plus `allow`/`deny` rules scoping Edit/Write to those directories (`~/.local/bin` excluded — its contents are managed scripts) |
+| Claude Code | `~/.claude/settings.json` | `permissions.additionalDirectories` for every `DEV_DIRS` entry, plus `allow`/`deny` `Edit(...)` rules scoping file edits to those directories (`~/.local/bin` excluded — its contents are managed scripts). Only `Edit(...)` rules are written; `Write(...)` rules aren't matched by Claude Code's permission checks and are stripped from existing settings on each run |
 | Codex CLI | `~/.codex/config.toml` | `[projects."~/dev"]` marked `trust_level = "trusted"` |
 | GitHub Copilot CLI | `~/.copilot/config.json` | `~/dev` and `~/.local/bin` added to `trustedFolders` |
 

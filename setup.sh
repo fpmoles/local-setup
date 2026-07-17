@@ -705,14 +705,17 @@ configure_claude_settings() {
   )
   local static_deny=(
     "Bash(rm -rf*)" "Bash(curl*)" "Bash(wget*)"
-    "Write(~/.local/bin/**)" "Bash(chmod*~/.local/bin*)"
+    "Edit(~/.local/bin/**)" "Bash(chmod*~/.local/bin*)"
   )
 
   for dir in "${DEV_DIRS[@]}"; do
     tilde_dir="$(to_tilde_path "$dir")"
     additional_dirs+=("$tilde_dir")
     if [[ "$dir" != "${HOME}/.local/bin" ]]; then
-      allow_rules+=("Edit(${tilde_dir}/**)" "Write(${tilde_dir}/**)")
+      # Edit() rules cover all file-editing tools (Write included) in
+      # Claude Code's permission checks; a separate Write() rule is never
+      # matched and only clutters the settings file.
+      allow_rules+=("Edit(${tilde_dir}/**)")
     fi
   done
   allow_rules=("${static_allow[@]}" "${allow_rules[@]}")
@@ -728,10 +731,14 @@ configure_claude_settings() {
       --argjson newDirs "$dirs_json" \
       --argjson newAllow "$allow_json" \
       --argjson newDeny "$deny_json" \
-      '.permissions = ((.permissions // {}) + {
+      '# Write(...) rules are dead weight: only Edit(...) rules are matched by
+       # Claude Code permission checks. Drop any stale Write() rule left over
+       # from earlier versions of this script before merging in the current set.
+       def dropDeadWrite: map(select(startswith("Write(") | not));
+       .permissions = ((.permissions // {}) + {
          additionalDirectories: (((.permissions.additionalDirectories // []) + $newDirs) | unique),
-         allow: (((.permissions.allow // []) + $newAllow) | unique),
-         deny: (((.permissions.deny // []) + $newDeny) | unique)
+         allow: ((((.permissions.allow // []) | dropDeadWrite) + $newAllow) | unique),
+         deny: ((((.permissions.deny // []) | dropDeadWrite) + $newDeny) | unique)
        })' \
       "$settings_file" > "$tmp_file" 2> /dev/null; then
       mv "$tmp_file" "$settings_file"

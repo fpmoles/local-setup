@@ -74,12 +74,21 @@ declare -a YARN_GLOBAL_PACKAGES=(
   "create-redwood-app"
 )
 
+# Claude Code's own agent/skill directories (fpm_* agents & skills, per
+# CLAUDE.md). Granted read-only access in configure_claude_settings so
+# invoking an fpm agent/skill doesn't hit a permission prompt.
+declare -a CLAUDE_READONLY_DIRS=(
+  "${HOME}/.claude/agents"
+  "${HOME}/.claude/skills"
+)
+
 # Development directories to create
 declare -a DEV_DIRS=(
   "${HOME}/.local/bin"
   "${HOME}/dev"
   "${HOME}/dev/code"
   "${HOME}/dev/designs"
+  "${HOME}/dev/docs"
   "${HOME}/dev/docker"
   "${HOME}/dev/go"
   "${HOME}/dev/learning"
@@ -516,6 +525,7 @@ export DEV_HOME="${HOME}/dev"
 export GOPATH="${DEV_HOME}/go"
 export CODE_HOME="${DEV_HOME}/code"
 export DOCKER_DATA_HOME="${DEV_HOME}/docker"
+export DOCS_HOME="${DEV_HOME}/docs"
 export JAVA_HOME="$(/usr/libexec/java_home 2>/dev/null)"
 export LEARNING_HOME="${DEV_HOME}/learning"
 export SCRIPTS_HOME="${HOME}/.local/bin"
@@ -539,6 +549,8 @@ fi
 # Aliases
 alias k='kubectl'
 alias code='cd ${CODE_HOME} && ls'
+alias docs='cd ${DOCS_HOME} && ls'
+alias designs='cd ${DEV_HOME}/designs && ls'
 alias kc='kubectl config'
 alias kg='kubectl get'
 alias kd='kubectl describe'
@@ -589,16 +601,27 @@ configure_gitconfig() {
   info "Configuring global git settings..."
 
   local git_name="Frank P Moley III"
+  local existing_email
+  existing_email="$(git config --global user.email 2> /dev/null || true)"
 
-  while [[ -z "$GIT_EMAIL" ]]; do
-    read -r -p "Enter your git email address: " GIT_EMAIL || true
-    if [[ -z "$GIT_EMAIL" ]]; then
-      warn "Email address is required for git configuration"
-    fi
-  done
+  if [[ -n "$existing_email" ]]; then
+    GIT_EMAIL="$existing_email"
+    log_verbose "Git email already configured: $GIT_EMAIL"
+  elif [[ -t 0 ]]; then
+    while [[ -z "$GIT_EMAIL" ]]; do
+      read -r -p "Enter your git email address: " GIT_EMAIL || true
+      if [[ -z "$GIT_EMAIL" ]]; then
+        warn "Email address is required for git configuration"
+      fi
+    done
+  else
+    warn "No git email configured and no terminal available to prompt; skipping user.email"
+  fi
 
   git config --global user.name "$git_name"
-  git config --global user.email "$GIT_EMAIL"
+  if [[ -n "$GIT_EMAIL" ]]; then
+    git config --global user.email "$GIT_EMAIL"
+  fi
 
   git config --global init.defaultBranch main
 
@@ -718,6 +741,13 @@ configure_claude_settings() {
       allow_rules+=("Edit(${tilde_dir}/**)")
     fi
   done
+
+  for dir in "${CLAUDE_READONLY_DIRS[@]}"; do
+    tilde_dir="$(to_tilde_path "$dir")"
+    additional_dirs+=("$tilde_dir")
+    allow_rules+=("Read(${tilde_dir}/**)")
+  done
+
   allow_rules=("${static_allow[@]}" "${allow_rules[@]}")
 
   local dirs_json allow_json deny_json

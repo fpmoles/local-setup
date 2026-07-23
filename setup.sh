@@ -139,6 +139,7 @@ Options:
   --skip-ssh-key            Skip SSH keypair generation
   --skip-ai-config          Skip AI coding tool configuration (Claude Code, Codex, Copilot)
   --skip-all                Skip all installation steps (useful for testing)
+  --zshrc-only              Only run zshrc configuration, skip everything else
 
 Examples:
   ./setup.sh                              # Full setup
@@ -153,6 +154,7 @@ Examples:
   ./setup.sh --skip-gitconfig             # Skip git global config
   ./setup.sh --skip-ssh-key               # Skip SSH keypair generation
   ./setup.sh --skip-all                   # Dry-run: parse args only (useful for testing)
+  ./setup.sh --zshrc-only                 # Repair/reorder the .zshrc managed block only
 EOF
   exit 0
 }
@@ -224,6 +226,18 @@ parse_args() {
         SKIP_NPM_GLOBALS=true
         SKIP_YARN_GLOBALS=true
         SKIP_ZSHRC=true
+        SKIP_DIRECTORIES=true
+        SKIP_GITCONFIG=true
+        SKIP_SSH_KEY=true
+        SKIP_AI_CONFIG=true
+        shift
+        ;;
+      --zshrc-only)
+        SKIP_HOMEBREW=true
+        SKIP_PACKAGES=true
+        SKIP_CASKS=true
+        SKIP_NPM_GLOBALS=true
+        SKIP_YARN_GLOBALS=true
         SKIP_DIRECTORIES=true
         SKIP_GITCONFIG=true
         SKIP_SSH_KEY=true
@@ -496,6 +510,7 @@ configure_zshrc() {
 
   local zshrc_file="${HOME}/.zshrc"
   local tmp_file="${zshrc_file}.tmp"
+  local block_file="${zshrc_file}.block.tmp"
   local begin_marker="# >>> local-setup managed block >>>"
   local end_marker="# <<< local-setup managed block <<<"
 
@@ -507,18 +522,25 @@ configure_zshrc() {
     log_verbose "Created new .zshrc file"
   fi
 
-  # Replace only our managed block so user customizations outside this block stay intact.
+  # Strip any existing managed block (wherever it currently lives) so it can be
+  # rewritten at the top of the file. Everything the managed block exports (DEV_HOME,
+  # GOPATH, PATH additions, etc.) needs to be in place before later config relies on it.
   if grep -Fq "$begin_marker" "$zshrc_file"; then
     awk -v begin="$begin_marker" -v end="$end_marker" '
       $0 == begin { in_block=1; next }
       $0 == end { in_block=0; next }
       !in_block { print }
     ' "$zshrc_file" > "$tmp_file"
-    mv "$tmp_file" "$zshrc_file"
+  else
+    cp "$zshrc_file" "$tmp_file"
   fi
 
-  cat >> "$zshrc_file" << 'ZSHRC_MANAGED'
+  # Drop leading blank lines left behind by the removed block so re-running this
+  # doesn't accumulate extra blank lines between the block and the rest of the file.
+  awk 'BEGIN{skipping=1} skipping && /^[[:space:]]*$/{next} {skipping=0; print}' "$tmp_file" > "${tmp_file}.trimmed"
+  mv "${tmp_file}.trimmed" "$tmp_file"
 
+  cat > "$block_file" << 'ZSHRC_MANAGED'
 # >>> local-setup managed block >>>
 # Environment variables
 export DEV_HOME="${HOME}/dev"
@@ -559,7 +581,11 @@ alias tf='terraform'
 
 PROMPT="%D%T %~ "
 # <<< local-setup managed block <<<
+
 ZSHRC_MANAGED
+
+  cat "$block_file" "$tmp_file" > "$zshrc_file"
+  rm -f "$tmp_file" "$block_file"
 
   success "zshrc configuration complete"
 }

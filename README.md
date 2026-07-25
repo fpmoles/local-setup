@@ -82,6 +82,7 @@ Installed from `BREW_CASKS` in `setup.sh`:
 - `docker`
 - `oracle-jdk@17`
 - `oracle-jdk@21`
+- `oracle-jdk@25`
 - `oracle-jdk`
 
 Notes:

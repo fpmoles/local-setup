@@ -60,6 +60,7 @@ declare -a BREW_CASKS=(
   "gcloud-cli"
   "oracle-jdk@17"
   "oracle-jdk@21"
+  "oracle-jdk@25"
   "oracle-jdk"
 )
 
